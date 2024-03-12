@@ -23,6 +23,7 @@ library main;
 
 import 'dart:async';
 
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:callkeep/callkeep.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -81,7 +82,10 @@ Future<void> main() async {
   Future<void> appRunner() async {
     MediaKit.ensureInitialized();
     WebUtils.setPathUrlStrategy();
-
+     AwesomeNotifications().initialize(null, [ 
+      NotificationChannel(channelKey: 'basic_channel', channelName: 'Basic notifications', channelDescription: 'notifications for test')
+    ],
+    debug: true);
     await _initHive();
 
     if (PlatformUtils.isDesktop && !PlatformUtils.isWeb) {
@@ -89,8 +93,10 @@ Future<void> main() async {
       await windowManager.setMinimumSize(const Size(400, 400));
 
       final WindowPreferencesHiveProvider preferences = Get.find();
-      final WindowPreferences? prefs = preferences.get();
+      
+       final WindowPreferences? prefs = preferences.get();
 
+  
       if (prefs?.size != null) {
         await windowManager.setSize(prefs!.size!);
       }
