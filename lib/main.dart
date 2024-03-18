@@ -365,7 +365,6 @@ Future<void> _initHive() async {
     await Hive.initFlutter('hive');
     Hive.openBox('version').then((box) async {
       await box.put(0, version);
-
       if (session != null) {
         await box.put(1, session);
       } else if (storedSession != null) {
