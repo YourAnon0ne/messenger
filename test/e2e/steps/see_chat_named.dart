@@ -15,19 +15,28 @@
 // along with this program. If not, see
 // <https://www.gnu.org/licenses/agpl-3.0.html>.
 
-import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
+import 'package:gherkin/gherkin.dart';
+import 'package:messenger/domain/model/chat.dart';
+import 'package:messenger/ui/page/home/tab/chats/controller.dart';
 
-export 'view.dart';
+import '../world/custom_world.dart';
 
-/// [Routes.work] page controller.
-class WorkController extends GetxController {
-  /// [ScrollController] to pass to a [Scrollbar].
-  final ScrollController scrollController = ScrollController();
+/// Indicates whether a [Chat] with the provided name is displayed in the
+/// [Chat]s list.
+///
+/// Examples:
+/// - Then I see "Example" chat
+final StepDefinitionGeneric seeNamedChat = then1<String, CustomWorld>(
+  'I see {string} chat',
+  (name, context) async {
+    await context.world.appDriver.waitUntil(
+      () async {
+        await context.world.appDriver.waitForAppToSettle();
 
-  @override
-  void onClose() {
-    scrollController.dispose();
-    super.onClose();
-  }
-}
+        final controller = Get.find<ChatsTabController>();
+        return controller.chats.any((c) => c.rx.title == name);
+      },
+    );
+  },
+);

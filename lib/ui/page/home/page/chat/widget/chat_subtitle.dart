@@ -151,7 +151,7 @@ class _ChatSubtitleState extends State<ChatSubtitle> {
 
           final Iterable<String> typings = widget.chat.typingUsers
               .where((e) => e.id != widget.me)
-              .map((e) => e.name?.val ?? e.num.toString());
+              .map((e) => e.title);
 
           return Row(
             mainAxisSize: MainAxisSize.min,
@@ -185,7 +185,8 @@ class _ChatSubtitleState extends State<ChatSubtitle> {
         return const SizedBox();
       } else if (chat.isDialog) {
         final RxUser? member = widget.chat.members.values
-            .firstWhereOrNull((u) => u.user.value.id != widget.me);
+            .firstWhereOrNull((u) => u.user.user.value.id != widget.me)
+            ?.user;
 
         if (member != null) {
           return Obx(() {

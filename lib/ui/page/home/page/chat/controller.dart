@@ -308,6 +308,10 @@ class ChatController extends GetxController {
   /// Worker performing a [readChat] on [_lastSeenItem] changes.
   Worker? _readWorker;
 
+  /// Worker performing a [readChat] when the [RouterState.obscuring] becomes
+  /// empty.
+  Worker? _obscuredWorker;
+
   /// Worker performing a jump to the last read message on a successful
   /// [RxChat.status].
   Worker? _messageInitializedWorker;
@@ -378,7 +382,7 @@ class ChatController extends GetxController {
   ///
   /// Only meaningful, if the [chat] is a dialog.
   RxUser? get user => chat?.chat.value.isDialog == true
-      ? chat?.members.values.firstWhereOrNull((e) => e.id != me)
+      ? chat?.members.values.firstWhereOrNull((e) => e.user.id != me)?.user
       : null;
 
   /// Indicates whether the [listController] is scrolled to its bottom.
@@ -393,7 +397,7 @@ class ChatController extends GetxController {
 
   /// Returns the [ChatContactId] of the [ChatContact] the [user] is linked to,
   /// if any.
-  ChatContactId? get _contactId => user?.user.value.contacts.firstOrNull;
+  ChatContactId? get _contactId => user?.user.value.contacts.firstOrNull?.id;
 
   @override
   void onInit() {
@@ -443,12 +447,18 @@ class ChatController extends GetxController {
                   repliesTo: send.replied.toList(),
                   attachments: send.attachments.map((e) => e.value).toList(),
                 )
-                .then((_) => AudioUtils.once(
-                    AudioSource.asset('audio/message_sent.mp3')))
+                .then(
+                  (_) => AudioUtils.once(
+                    AudioSource.asset('audio/message_sent.mp3'),
+                  ),
+                )
                 .onError<PostChatMessageException>(
-                    (e, _) => MessagePopup.error(e))
+                  (_, __) => _showBlockedPopup(),
+                  test: (e) => e.code == PostChatMessageErrorCode.blocked,
+                )
                 .onError<UploadAttachmentException>(
-                    (e, _) => MessagePopup.error(e))
+                  (e, _) => MessagePopup.error(e),
+                )
                 .onError<ConnectionException>((e, _) {});
 
             send.clear(unfocus: false);
@@ -495,6 +505,7 @@ class ChatController extends GetxController {
     _readWorker?.dispose();
     _chatWorker?.dispose();
     _selectingWorker?.dispose();
+    _obscuredWorker?.dispose();
     _typingSubscription?.cancel();
     _chatSubscription?.cancel();
     _userSubscription?.cancel();
@@ -591,9 +602,13 @@ class ChatController extends GetxController {
     if (item.status.value == SendingStatus.error) {
       await _chatService
           .resendChatItem(item)
-          .then((_) =>
-              AudioUtils.once(AudioSource.asset('audio/message_sent.mp3')))
-          .onError<PostChatMessageException>((e, _) => MessagePopup.error(e))
+          .then(
+            (_) => AudioUtils.once(AudioSource.asset('audio/message_sent.mp3')),
+          )
+          .onError<PostChatMessageException>(
+            (_, __) => _showBlockedPopup(),
+            test: (e) => e.code == PostChatMessageErrorCode.blocked,
+          )
           .onError<UploadAttachmentException>((e, _) => MessagePopup.error(e))
           .onError<ConnectionException>((_, __) {});
     }
@@ -638,7 +653,11 @@ class ChatController extends GetxController {
 
               send.field.focus.requestFocus();
             } on EditChatMessageException catch (e) {
-              MessagePopup.error(e);
+              if (e.code == EditChatMessageErrorCode.blocked) {
+                _showBlockedPopup();
+              } else {
+                MessagePopup.error(e);
+              }
             } catch (e) {
               MessagePopup.error(e);
               rethrow;
@@ -775,12 +794,18 @@ class ChatController extends GetxController {
 
       if (chat?.chat.value.isDialog == true) {
         _userSubscription = chat?.members.values
-            .lastWhereOrNull((u) => u.id != me)
-            ?.updates
+            .lastWhereOrNull((u) => u.user.id != me)
+            ?.user
+            .updates
             .listen((_) {});
       }
 
       _readWorker ??= ever(_lastSeenItem, readChat);
+      _obscuredWorker ??= ever(router.obscuring, (modals) {
+        if (modals.isEmpty) {
+          readChat(_lastSeenItem.value);
+        }
+      });
 
       // If [RxChat.status] is not successful yet, populate the
       // [_messageInitializedWorker] to determine the initial messages list
@@ -886,7 +911,8 @@ class ChatController extends GetxController {
         !chat!.chat.value.isReadBy(item, me) &&
         status.value.isSuccess &&
         !status.value.isLoadingMore &&
-        item.status.value == SendingStatus.sent) {
+        item.status.value == SendingStatus.sent &&
+        router.obscuring.isEmpty) {
       try {
         await _chatService.readChat(chat!.chat.value.id, item.id);
       } on ReadChatException catch (e) {
@@ -1545,7 +1571,7 @@ class ChatController extends GetxController {
         _fragment = fragment;
       }
 
-      await _fragment!.ensureInitialized();
+      await _fragment!.around();
 
       elements.clear();
       _fragment!.items.values.forEach(_add);
@@ -2056,6 +2082,34 @@ class ChatController extends GetxController {
 
     return false;
   }
+
+  /// Displays a [MessagePopup.error] visually representing a blocked error.
+  ///
+  /// Meant to be invoked in case of `blocked` type of errors possibly thrown
+  /// during operations with this [Chat].
+  void _showBlockedPopup() {
+    switch (chat?.chat.value.kind) {
+      case ChatKind.dialog:
+        if (user != null) {
+          MessagePopup.error(
+            'err_blocked_by'.l10nfmt(
+              {'user': '${user?.user.value.name ?? user?.user.value.num}'},
+            ),
+          );
+        }
+        break;
+
+      case ChatKind.group:
+        MessagePopup.error('err_blocked'.l10n);
+        break;
+
+      case ChatKind.monolog:
+      case ChatKind.artemisUnknown:
+      case null:
+        // No-op.
+        break;
+    }
+  }
 }
 
 /// ID of a [ListElement] containing its [PreciseDateTime] and [ChatItemId].
@@ -2184,7 +2238,7 @@ class LoaderElement extends ListElement {
 /// Extension adding [ChatView] related wrappers and helpers.
 extension ChatViewExt on Chat {
   /// Returns text represented title of this [Chat].
-  String getTitle(Iterable<User> users, UserId? me) {
+  String getTitle(Iterable<RxUser> users, UserId? me) {
     String title = 'dot'.l10n * 3;
 
     switch (kind) {
@@ -2193,23 +2247,24 @@ extension ChatViewExt on Chat {
         break;
 
       case ChatKind.dialog:
-        final User? partner = users.firstWhereOrNull((u) => u.id != me);
-        final partnerName = partner?.name?.val ?? partner?.num.toString();
-        if (partnerName != null) {
-          title = partnerName;
+        final String? name = users.firstWhereOrNull((u) => u.id != me)?.title ??
+            members.firstWhereOrNull((e) => e.user.id != me)?.user.title;
+        if (name != null) {
+          title = name;
         }
         break;
 
       case ChatKind.group:
         if (name == null) {
-          if (users.isEmpty) {
-            users = members.map((e) => e.user);
+          final Iterable<String> names;
+
+          if (users.length < membersCount && users.length < 3) {
+            names = members.take(3).map((e) => e.user.title);
+          } else {
+            names = users.take(3).map((e) => e.title);
           }
 
-          title = users
-              .take(3)
-              .map((u) => u.name?.val ?? u.num.toString())
-              .join('comma_space'.l10n);
+          title = names.join('comma_space'.l10n);
           if (membersCount > 3) {
             title += 'comma_space'.l10n + ('dot'.l10n * 3);
           }

@@ -17,30 +17,31 @@
 
 import 'package:get/get.dart';
 import 'package:gherkin/gherkin.dart';
-import 'package:messenger/domain/model/chat.dart';
-import 'package:messenger/domain/repository/chat.dart';
-import 'package:messenger/domain/service/chat.dart';
-import 'package:messenger/routes.dart';
+import 'package:messenger/domain/model/contact.dart';
+import 'package:messenger/domain/model/user.dart';
+import 'package:messenger/domain/service/auth.dart';
+import 'package:messenger/provider/gql/graphql.dart';
 
+import '../parameters/users.dart';
 import '../world/custom_world.dart';
 
-/// Waits until the [Chat.members] count is indeed the provided count.
+/// Renames the [ChatContact] with the provided user.
 ///
 /// Examples:
-/// - Then I see 15 chat members
-final StepDefinitionGeneric seeChatMembers = then1<int, CustomWorld>(
-  RegExp(r'I see {int} chat members'),
-  (int count, context) async {
-    await context.world.appDriver.waitUntil(
-      () async {
-        await context.world.appDriver.waitForAppToSettle();
+/// - When I rename Bob contact to "Example"
+final StepDefinitionGeneric renameContact =
+    when2<TestUser, String, CustomWorld>(
+  'I rename {user} contact to {string}',
+  (user, name, context) async {
+    final ChatContactId contactId = context.world.contacts[user.name]!;
 
-        final RxChat? chat =
-            Get.find<ChatService>().chats[ChatId(router.route.split('/')[2])];
+    final AuthService authService = Get.find();
+    final provider = GraphQlProvider();
+    provider.token = authService.credentials.value!.session.token;
 
-        return chat?.members.length == count;
-      },
-    );
+    await provider.changeContactName(contactId, UserName(name));
+
+    provider.disconnect();
   },
   configuration: StepDefinitionConfiguration()
     ..timeout = const Duration(minutes: 5),

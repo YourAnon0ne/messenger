@@ -154,7 +154,7 @@ class AvatarWidget extends StatelessWidget {
         isOnline: badge && myUser?.online == true,
         isAway: myUser?.presence == Presence.away,
         avatar: myUser?.avatar,
-        title: myUser?.name?.val ?? myUser?.num.val,
+        title: myUser?.name?.val ?? myUser?.num.toString(),
         color: myUser?.num.val.sum(),
         radius: radius,
         opacity: opacity,
@@ -171,7 +171,7 @@ class AvatarWidget extends StatelessWidget {
       AvatarWidget(
         key: key,
         avatar: user?.avatar,
-        title: user?.name?.val ?? user?.num.val,
+        title: user?.title,
         color: user?.num.val.sum(),
         radius: radius,
         opacity: opacity,
@@ -200,7 +200,7 @@ class AvatarWidget extends StatelessWidget {
         isOnline: badge && user.user.value.online == true,
         isAway: user.user.value.presence == Presence.away,
         avatar: user.user.value.avatar,
-        title: user.user.value.name?.val ?? user.user.value.num.val,
+        title: user.title,
         color: user.user.value.num.val.sum(),
         radius: radius,
         opacity: opacity,
@@ -278,14 +278,15 @@ class AvatarWidget extends StatelessWidget {
         );
       }
 
-      final RxUser? user =
-          chat.members.values.firstWhereOrNull((e) => e.id != chat.me);
+      final RxUser? user = chat.members.values
+          .firstWhereOrNull((e) => e.user.id != chat.me)
+          ?.user;
       return AvatarWidget(
         key: key,
         isOnline: chat.chat.value.isDialog && user?.user.value.online == true,
         isAway: user?.user.value.presence == Presence.away,
         avatar: chat.avatar.value,
-        title: chat.title.value,
+        title: chat.title,
         color: chat.chat.value.colorDiscriminant(chat.me).sum(),
         radius: radius,
         opacity: opacity,

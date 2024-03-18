@@ -30,7 +30,8 @@ fragment User on User {
     }
     mutualContactsCount
     contacts {
-        id
+        __typename
+        ...NestedChatContact
     }
     online {
         __typename

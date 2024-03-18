@@ -15,10 +15,14 @@
 # along with this program. If not, see
 # <https://www.gnu.org/licenses/agpl-3.0.html>.
 
-fragment ChatMember on ChatMember {
-    user {
-        __typename
-        ...User
-    }
-    joinedAt
-}
+Feature: Contacts renaming
+
+  Scenario: User sees dialog's title being contact's name
+    Given I am Alice
+    And user Bob
+    And contact Bob
+    And Bob has dialog with me
+    And I see "Bob" chat
+
+    When I rename Bob contact to "Charlie"
+    Then I see "Charlie" chat
